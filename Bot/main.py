@@ -37,6 +37,6 @@ async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info("Бот запущен!")
     await dp.start_polling(bot)
-
+#запуск бота
 if __name__ == "__main__":
     asyncio.run(main())
