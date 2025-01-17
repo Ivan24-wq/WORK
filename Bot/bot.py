@@ -68,6 +68,14 @@ def update_user_city(telegram_id, city):
     connection.commit()
     connection.close()
 
+# Функция добавления цены аренды
+def update_user_price(telegram_id, price):
+    connection = sqlite3.connect("database.db")
+    cursor = connection.cursor()
+    cursor.execute("UPDATE ysers SET subscription = ? WHERE telegram_id = ?",(price, telegram_id))
+    connection.commit()
+    connection.cursor()
+
 # Клавиатура для выбора подписки
 finish_keyboard = ReplyKeyboardMarkup(
     keyboard=[
@@ -95,6 +103,7 @@ async def start_command(message: types.Message):
 
 class UserStates(StatesGroup):
     waiting_for_city = State()
+    waiting_for_price = State()
 # Обработчик выбора подписки
 @dp.message(F.text.in_(["Standart", "😎 PREMIUM"]))
 async def subscription_choice(message: types.Message, state: FSMContext):
@@ -110,6 +119,7 @@ async def subscription_choice(message: types.Message, state: FSMContext):
         )
         await message.answer(
             f"Вы выбрали подписку {selected_subscription}. Теперь выберите ваш город!"
+        
         )
         await state.set_state(UserStates.waiting_for_city)
     elif current_subscription == selected_subscription:
@@ -154,8 +164,16 @@ async def city_input(message: types.Message):
     user_id = message.from_user.id
     city = message.text
     update_user_city(user_id, city)
-    await message.answer(f"Ваш город {city}")
+    await message.answer(f"Ваш город {city} Теперь укажите цену аренды")
 
+
+# Команда цена
+@dp.message(UserStates.waiting_for_price)
+async def price_input(message: types.Message):
+    user_id = message.from_user.id
+    price = message.text
+    update_user_price(user_id, price)
+    await message.answer(f"Указанная цена {price}")
 
 #обработка команды тарифы
 @dp.message(lambda message: message.text == "Тарифы!")
