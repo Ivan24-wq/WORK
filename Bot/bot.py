@@ -2,6 +2,9 @@ import asyncio
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.memory import MemoryStorage
 import logging
 import os
 import sqlite3
@@ -57,6 +60,14 @@ def update_user_subscription(telegram_id, subscription):
     connection.commit()
     connection.close()
 
+# Функция для добавления пользователя в БД
+def update_user_city(telegram_id, city):
+    connection = sqlite3.connect("database.db")
+    cursor = connection.cursor()
+    cursor.execute("UPDATE users SET subscription = ? WHERE telegram_id = ?",(city, telegram_id))
+    connection.commit()
+    connection.close()
+
 # Клавиатура для выбора подписки
 finish_keyboard = ReplyKeyboardMarkup(
     keyboard=[
@@ -82,19 +93,25 @@ async def start_command(message: types.Message):
         reply_markup=start_keyboard
     )
 
+class UserStates(StatesGroup):
+    waiting_for_city = State()
 # Обработчик выбора подписки
 @dp.message(F.text.in_(["Standart", "😎 PREMIUM"]))
-async def subscription_choice(message: types.Message):
+async def subscription_choice(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     current_subscription = get_user_subscription(user_id)
     selected_subscription = "Standart" if message.text == "Standart" else "Premium"
-
+    
     if current_subscription is None:
         # Если подписка ещё не выбрана
         update_user_subscription(user_id, selected_subscription)
         await message.answer(
             f"Вы выбрали подписку {selected_subscription}! Спасибо за ваш выбор."
         )
+        await message.answer(
+            f"Вы выбрали подписку {selected_subscription}. Теперь выберите ваш город!"
+        )
+        await state.set_state(UserStates.waiting_for_city)
     elif current_subscription == selected_subscription:
         # Если пользователь повторно выбирает ту же подписку
         await message.answer(
@@ -130,6 +147,15 @@ async def cancel_subscription_change(message: types.Message):
     await message.answer(
         f"Смена подписки отменена!", reply_markup=finish_keyboard
     )
+
+    #Команда город
+@dp.message(UserStates.waiting_for_city)
+async def city_input(message: types.Message):
+    user_id = message.from_user.id
+    city = message.text
+    update_user_city(user_id, city)
+    await message.answer(f"Ваш город {city}")
+
 
 #обработка команды тарифы
 @dp.message(lambda message: message.text == "Тарифы!")
