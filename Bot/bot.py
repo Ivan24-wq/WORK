@@ -3,10 +3,9 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command
 import logging
-import datetime
-from dotenv import load_dotenv
 import os
 import sqlite3
+from dotenv import load_dotenv
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -26,28 +25,45 @@ def create_table():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        subscription TEXT NOT NULL,
-        phone TEXT NOT NULL
+        telegram_id INTEGER UNIQUE NOT NULL,
+        subscription TEXT DEFAULT NULL
     )
     """)
     connection.commit()
     connection.close()
 
-# Функция для добавления пользователя в базу данных
-def add_user(name, subscription, phone):
+# Функция для добавления пользователя в базу данных (если отсутствует)
+def add_user_if_not_exists(telegram_id):
     connection = sqlite3.connect("database.db")
     cursor = connection.cursor()
-    cursor.execute("INSERT INTO users (name, subscription, phone) VALUES (?, ?, ?)", (name, subscription, phone))
+    cursor.execute("INSERT OR IGNORE INTO users (telegram_id) VALUES (?)", (telegram_id,))
     connection.commit()
     connection.close()
 
-# Клавиатура для запроса номера телефона
-def phone_request_keyboard():
-    keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
-    button = KeyboardButton("Отправить номер телефона", request_contact=True)
-    keyboard.add(button)
-    return keyboard
+# Функция для получения текущей подписки пользователя
+def get_user_subscription(telegram_id):
+    connection = sqlite3.connect("database.db")
+    cursor = connection.cursor()
+    cursor.execute("SELECT subscription FROM users WHERE telegram_id = ?", (telegram_id,))
+    result = cursor.fetchone()
+    connection.close()
+    return result[0] if result else None
+
+# Функция для обновления подписки пользователя
+def update_user_subscription(telegram_id, subscription):
+    connection = sqlite3.connect("database.db")
+    cursor = connection.cursor()
+    cursor.execute("UPDATE users SET subscription = ? WHERE telegram_id = ?", (subscription, telegram_id))
+    connection.commit()
+    connection.close()
+
+# Клавиатура для выбора подписки
+finish_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="Standart"), KeyboardButton(text="😎 PREMIUM")]
+    ],
+    resize_keyboard=True
+)
 
 # Кнопка старт
 start_keyboard = ReplyKeyboardMarkup(
@@ -57,37 +73,44 @@ start_keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# Создание кнопок для оформления подписки
-finish_keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="Standart"), KeyboardButton(text="😎 PREMIUM")]
-    ],
-    resize_keyboard=True
-)
-
 # Обработчик команды /start
 @dp.message(Command(commands=["start"]))
 async def start_command(message: types.Message):
+    add_user_if_not_exists(message.from_user.id)
     await message.answer(
         "Рады вас видеть! \nВыберите свой тарифный план!",
         reply_markup=start_keyboard
     )
 
-# Обработчик для подписки Standart
-@dp.message(F.text == "Standart")
-async def standart_subscription(message: types.Message):
-    await message.answer(
-        "Вы выбрали подписку Standart! Ваш функционал ограничен."
-    )
+# Обработчик выбора подписки
+@dp.message(F.text.in_(["Standart", "😎 PREMIUM"]))
+async def subscription_choice(message: types.Message):
+    user_id = message.from_user.id
+    current_subscription = get_user_subscription(user_id)
+    selected_subscription = "Standart" if message.text == "Standart" else "Premium"
 
-# Обработчик для подписки PREMIUM
-@dp.message(F.text == "😎 PREMIUM")
-async def premium_subscription(message: types.Message):
-    await message.answer(
-        "Вы выбрали подписку PREMIUM. Спасибо, что выбрали нашу команду!"
-    )
-
-# Проработка кнопки "Выберите подписку"
+    if current_subscription is None:
+        # Если подписка ещё не выбрана
+        update_user_subscription(user_id, selected_subscription)
+        await message.answer(
+            f"Вы выбрали подписку {selected_subscription}! Спасибо за ваш выбор."
+        )
+    elif current_subscription == selected_subscription:
+        # Если пользователь повторно выбирает ту же подписку
+        await message.answer(
+            f"У вас уже активна подписка {current_subscription}."
+        )
+    else:
+        # Если пользователь пытается выбрать другую подписку
+        await message.answer(
+            f"У вас уже активна подписка {current_subscription}. Хотите сменить её на {selected_subscription}?",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[
+                    [KeyboardButton(text="Да, сменить подписку"), KeyboardButton(text="Отмена")]
+                ],
+                resize_keyboard=True
+            )
+        )
 @dp.message(lambda message: message.text == "Выберите подписку!")
 async def command(message: types.Message):
     await message.answer(
@@ -107,4 +130,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-#
