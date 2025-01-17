@@ -68,7 +68,7 @@ finish_keyboard = ReplyKeyboardMarkup(
 # Кнопка старт
 start_keyboard = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="Выберите подписку!")]
+        [KeyboardButton(text="Выберите подписку!"), KeyboardButton(text="Тарифы!")]
     ],
     resize_keyboard=True
 )
@@ -130,10 +130,24 @@ async def cancel_subscription_change(message: types.Message):
     await message.answer(
         f"Смена подписки отменена!", reply_markup=finish_keyboard
     )
+
+#обработка команды тарифы
+@dp.message(lambda message: message.text == "Тарифы!")
+async def command(message: types.Message):
+    await message.answer(
+        "🗓 Тарифные план:\n"
+        "📊Цена на подписку:\n"
+        "✅1 месяц - 200р\n"
+        "✅3 месяца – 499р\n"
+        "✅1 год – 2200р/n"
+    )
+    
+
+
 @dp.message(lambda message: message.text == "Выберите подписку!")
 async def command(message: types.Message):
     await message.answer(
-        "Есть два варианта подписки. Standart - бесплатно, объявления доступны в пределах вашего региона. Premium - цена 220р., объявления доступны в пределах города!",
+        "Есть два варианта подписки. Standart - бесплатно, объявления доступны в пределах вашего региона. Premium - соответственно платно., объявления доступны в пределах города!",
         reply_markup=finish_keyboard
     )
 
