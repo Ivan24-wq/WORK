@@ -111,6 +111,25 @@ async def subscription_choice(message: types.Message):
                 resize_keyboard=True
             )
         )
+
+        # Смена подписки
+
+@dp.message(F.text == "Да, сменить подписку")
+async def confirm_subscription_change(message: types.Message):
+    user_id = message.from_user.id
+    selected_supscription = "😎 PREMIUM" if get_user_subscription(user_id) == "Standart" else "Standart"
+    update_user_subscription(user_id, selected_supscription)
+    await message.answer(
+        f"Поздравляем вас! Вы успешно перешли на подписку {selected_supscription}"
+    )
+
+
+    # Отмена смены подписки
+@dp.message(F.text == "Отмена")
+async def cancel_subscription_change(message: types.Message):
+    await message.answer(
+        f"Смена подписки отменена!", reply_markup=finish_keyboard
+    )
 @dp.message(lambda message: message.text == "Выберите подписку!")
 async def command(message: types.Message):
     await message.answer(
