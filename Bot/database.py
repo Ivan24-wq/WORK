@@ -46,24 +46,49 @@ def add_user_if_not_exists(telegram_id):
     connection.close()
 
 
-def update_user_subscription(telegram_id, subscription, months=0):
-    """Обновляет подписку пользователя и срок ее действия."""
-    connection = sqlite3.connect("database.db")
-    cursor = connection.cursor()
 
-    # Устанавливаем срок действия подписки
-    expiry_date = None
-    if months > 0:
-        expiry_date = (datetime.now() + timedelta(days=30 * months)).date()
 
-    cursor.execute("""
-        UPDATE users 
-        SET subscription = ?, subscription_expiry = ? 
-        WHERE telegram_id = ?
-    """, (subscription, expiry_date, telegram_id))
+def update_user_subscription(user_id, subscription_type, duration_in_days):
+    """Обновляет подписку пользователя."""
+    try:
+        connection = sqlite3.connect("database.db")
+        cursor = connection.cursor()
 
-    connection.commit()
-    connection.close()
+        # Вычисляем дату окончания подписки
+        end_date = (datetime.now() + timedelta(days=duration_in_days)).strftime("%Y-%m-%d")
+
+        # Обновляем подписку
+        cursor.execute("""
+            UPDATE user
+            SET current_subscription = ?, subscription_end_date = ?
+            WHERE telegram_id = ?
+        """, (subscription_type, end_date, user_id))
+        connection.commit()
+    except sqlite3.Error as e:
+        print(f"Ошибка обновления подписки: {e}")
+    finally:
+        connection.close()
+
+def get_user_subscription_info(user_id):
+    """Получает информацию о подписке пользователя."""
+    try:
+        connection = sqlite3.connect("database.db")
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            SELECT current_subscription, subscription_end_date
+            FROM user
+            WHERE telegram_id = ?
+        """, (user_id,))
+        result = cursor.fetchone()
+        return result if result else (None, None)
+    except sqlite3.Error as e:
+        print(f"Ошибка получения подписки: {e}")
+        return None, None
+    finally:
+        connection.close()
+
+
 
 
 def update_user_city(telegram_id, city):
@@ -223,11 +248,25 @@ def get_user_region(telegram_id):
         connection.close()
 
 
+def get_user_subscription_info(user_id):
+    """Получает информацию о подписке пользователя."""
+    try:
+        connection = sqlite3.connect("database.db")
+        cursor = connection.cursor()
 
-def get_user_subscription(telegram_id):
-    connection = sqlite3.connect("database.db")
-    cursor = connection.cursor()
-    cursor.execute("SELECT subscription FROM users WHERE telegram_id = ?", (telegram_id,))
-    result = cursor.fetchone()
-    connection.close()
-    return result[0] if result else None 
+        cursor.execute("""
+            SELECT subscription, subscription_expiry
+            FROM users
+            WHERE telegram_id = ?
+        """, (user_id,))
+        result = cursor.fetchone()
+        
+        if result:
+            return result
+        else:
+            return "Нет подписки", "Не указана дата окончания"  # Возвращаем дефолтные значения, если нет подписки.
+    except sqlite3.Error as e:
+        print(f"Ошибка получения подписки: {e}")
+        return "Ошибка", "Ошибка"
+    finally:
+        connection.close()

@@ -1,6 +1,6 @@
 import asyncio
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, InputFile
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -14,8 +14,8 @@ from database import (
     update_user_city,
     update_user_price,
     get_user_city,
-    get_user_subscription,
     get_listings_by_city_or_region_and_price,
+    get_user_subscription_info,
     get_user_region,
     update_user_region
 )
@@ -43,12 +43,10 @@ start_keyboard = ReplyKeyboardMarkup(
 
 premium_keyboard = InlineKeyboardMarkup(
     inline_keyboard=[
-        [
-            InlineKeyboardButton(text="1 месяц - 200р", callback_data="premium_1_month"),
-            InlineKeyboardButton(text="3 месяца - 499р", callback_data="premium_3_months"),
-        ],
+        [InlineKeyboardButton(text="1 месяц - 200р", callback_data="premium_1_month"),
+         InlineKeyboardButton(text="3 месяца - 499р", callback_data="premium_3_months")],
         [InlineKeyboardButton(text="1 год - 2200р", callback_data="premium_1_year")],
-        [InlineKeyboardButton(text="Назад", callback_data="back_to_subscription")],
+        [InlineKeyboardButton(text="Назад", callback_data="back_to_subscription")]
     ]
 )
 
@@ -66,31 +64,50 @@ async def start_command(message: types.Message):
 async def subscription_choice(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     selected_subscription = "Standart" if message.text == "Standart" else "Premium"
-    update_user_subscription(user_id, selected_subscription)
-
+    
+    # Обновление подписки для тарифов
     if selected_subscription == "Standart":
+        update_user_subscription(user_id, selected_subscription, 0)  # Standart подписка не имеет срока
         await message.answer("Вы выбрали подписку Standart. Укажите ваш регион.", reply_markup=types.ReplyKeyboardRemove())
         await state.set_state(UserStates.waiting_for_city_or_region)
-    else:  # Это исправленный блок else
+    else:  # PREMIUM
         await message.answer("Вы выбрали подписку Premium. Выберите тариф:", reply_markup=premium_keyboard)
-
 
 @dp.callback_query(lambda call: call.data.startswith("premium"))
 async def handle_premium_tariff(call: types.CallbackQuery, state: FSMContext):
     tariffs = {
-        "premium_1_month": "1 месяц - 200р",
-        "premium_3_months": "3 месяца - 499р",
-        "premium_1_year": "1 год - 2200р",
+        "premium_1_month": (200, 30),  # (цена, дни)
+        "premium_3_months": (499, 90),
+        "premium_1_year": (2200, 365),
     }
 
     tariff = call.data  # Получаем идентификатор тарифа из callback_data
-    selected_tariff = tariffs.get(tariff)  # Получаем название тарифа из словаря
+    selected_tariff = tariffs.get(tariff)  # Получаем данные о тарифе
 
     if selected_tariff:
-        await call.message.answer(f"Вы выбрали тариф {selected_tariff}. Укажите ваш город.")
+        price, duration = selected_tariff
+        update_user_subscription(call.from_user.id, "PREMIUM", duration)  # Обновляем подписку в БД
+
+        # Рассчитываем дату окончания подписки
+        subscription_type, end_date = get_user_subscription_info(call.from_user.id)
+
+        # Проверяем, если end_date == "Не указана дата окончания" или другое значение ошибки
+        if end_date == "Не указана дата окончания":
+            end_date = "Не установлена"  # Выводим сообщение о том, что дата не установлена
+
+        # Выводим сообщение о подписке
+        await call.message.answer(
+            f"Вы выбрали тариф 'PREMIUM'.\n"
+            f"Подписка активна до: {end_date}.\n"
+            f"Стоимость: {price} руб.\n"
+            f"Спасибо за выбор!"
+            
+        )
+        await call.message.answer(f"Укажите город поиска: ")
         await state.set_state(UserStates.waiting_for_city_or_region)
     else:
         await call.message.answer("Неизвестный тариф. Пожалуйста, выберите тариф заново.")
+
 
 @dp.message(lambda message: message.text == "Выберите подписку!")
 async def choose_subscription_command(message: types.Message):
@@ -103,6 +120,7 @@ async def city_input(message: types.Message, state: FSMContext):
     update_user_city(user_id, city_or_region)
     await message.answer("Укажите диапазон цен (например, 1000-5000):")
     await state.set_state(UserStates.waiting_for_price)
+
 @dp.message(UserStates.waiting_for_price)
 async def price_input(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
