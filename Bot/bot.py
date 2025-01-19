@@ -1,22 +1,23 @@
 import asyncio
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, InputFile
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 import logging
 import os
 from dotenv import load_dotenv
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from database import (
     create_table,
     add_user_if_not_exists,
-    
     update_user_subscription,
     update_user_city,
     update_user_price,
     get_user_city,
-    get_listings_by_city_and_price
+    get_user_subscription,
+    get_listings_by_city_or_region_and_price,
+    get_user_region,
+    update_user_region
 )
 
 # Загрузка переменных окружения
@@ -70,8 +71,9 @@ async def subscription_choice(message: types.Message, state: FSMContext):
     if selected_subscription == "Standart":
         await message.answer("Вы выбрали подписку Standart. Укажите ваш регион.", reply_markup=types.ReplyKeyboardRemove())
         await state.set_state(UserStates.waiting_for_city_or_region)
-    else:
+    else:  # Это исправленный блок else
         await message.answer("Вы выбрали подписку Premium. Выберите тариф:", reply_markup=premium_keyboard)
+
 
 @dp.callback_query(lambda call: call.data.startswith("premium"))
 async def handle_premium_tariff(call: types.CallbackQuery, state: FSMContext):
@@ -86,7 +88,6 @@ async def handle_premium_tariff(call: types.CallbackQuery, state: FSMContext):
 
     if selected_tariff:
         await call.message.answer(f"Вы выбрали тариф {selected_tariff}. Укажите ваш город.")
-        # Устанавливаем состояние для ожидания города
         await state.set_state(UserStates.waiting_for_city_or_region)
     else:
         await call.message.answer("Неизвестный тариф. Пожалуйста, выберите тариф заново.")
@@ -98,29 +99,37 @@ async def choose_subscription_command(message: types.Message):
 @dp.message(UserStates.waiting_for_city_or_region)
 async def city_input(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
-    city = message.text
-    update_user_city(user_id, city)
+    city_or_region = message.text
+    update_user_city(user_id, city_or_region)
     await message.answer("Укажите диапазон цен (например, 1000-5000):")
     await state.set_state(UserStates.waiting_for_price)
-
 @dp.message(UserStates.waiting_for_price)
 async def price_input(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     try:
+        # Разделяем диапазон цен
         min_price, max_price = map(int, message.text.split('-'))
-        update_user_price(user_id, min_price, max_price)
+        city = get_user_city(user_id)  # Получаем город из БД
+        region = get_user_region(user_id)  # Получаем регион из БД
 
-        city = get_user_city(user_id)
-        listings = get_listings_by_city_and_price(city, min_price, max_price)
+        if not city and not region:
+            await message.answer("Сначала укажите город или регион.")
+            return
+
+        # Ищем объявления по городу или региону
+        listings = get_listings_by_city_or_region_and_price(city, region, min_price, max_price)
 
         if listings:
-            await message.answer(f"Варианты по цене от {min_price} до {max_price} руб. в городе {city}:")
-            for description, price, contact in listings:
-                await message.answer(f"📋 Описание: {description}\n💵 Цена: {price} руб.\n📞 Контакт: {contact}")
+            await message.answer(f"Варианты по цене от {min_price} до {max_price} руб.")
+            for description, price, contact, photo in listings:
+                # Выводим только текстовую информацию
+                await message.answer(
+                    f"📋 Описание: {description}\n"
+                    f"💵 Цена: {price} руб.\n"
+                    f"📞 Контакт: {contact}"
+                )
         else:
-            await message.answer(f"Нет вариантов в городе {city} по указанному диапазону цен.")
-    except ValueError:
-        await message.answer("Введите диапазон цен в формате 'мин-мах' (например, 1000-5000).")
+            await message.answer(f"Нет вариантов по указанному диапазону цен в {city if city else region}.")
     finally:
         await state.clear()
 
