@@ -12,12 +12,11 @@ from database import (
     add_user_if_not_exists,
     update_user_subscription,
     update_user_city,
-    update_user_price,
     get_user_city,
-    get_listings_by_city_or_region_and_price,
-    get_user_subscription_info,
     get_user_region,
-    update_user_region
+    get_user_subscription_info,
+    update_user_region,
+    get_listings_by_city_or_region_and_price
 )
 from datetime import datetime
 
@@ -51,9 +50,17 @@ premium_keyboard = InlineKeyboardMarkup(
     ]
 )
 
+# Ввод нового города
+restart_keyboard = ReplyKeyboardMarkup(
+    keyboard=[[KeyboardButton(text="🔄 Ввести другой город")]],
+    resize_keyboard=True
+)
+
+
 class UserStates(StatesGroup):
     waiting_for_city_or_region = State()
     waiting_for_price = State()
+
 
 # Обработчики
 @dp.message(Command(commands=["start"]))
@@ -61,11 +68,12 @@ async def start_command(message: types.Message):
     add_user_if_not_exists(message.from_user.id)
     await message.answer("Рады вас видеть! \nВыберите свой тарифный план!", reply_markup=start_keyboard)
 
+
 @dp.message(F.text.in_(["Standart", "😎 PREMIUM"]))
 async def subscription_choice(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     selected_subscription = "Standart" if message.text == "Standart" else "Premium"
-    
+
     if selected_subscription == "Standart":
         update_user_subscription(user_id, selected_subscription, 0)  # Standart подписка не имеет срока
         await message.answer("Вы выбрали подписку Standart. Укажите ваш регион.", reply_markup=ReplyKeyboardMarkup(
@@ -75,6 +83,7 @@ async def subscription_choice(message: types.Message, state: FSMContext):
         await state.set_state(UserStates.waiting_for_city_or_region)
     else:
         await message.answer("Вы выбрали подписку Premium. Выберите тариф:", reply_markup=premium_keyboard)
+
 
 @dp.callback_query(lambda call: call.data.startswith("premium"))
 async def handle_premium_tariff(call: types.CallbackQuery, state: FSMContext):
@@ -105,13 +114,16 @@ async def handle_premium_tariff(call: types.CallbackQuery, state: FSMContext):
     else:
         await call.message.answer("Неизвестный тариф. Пожалуйста, выберите тариф заново.")
 
+
 @dp.message(lambda message: message.text == "Выберите подписку!")
 async def choose_subscription_command(message: types.Message):
     await message.answer("Выберите подписку:", reply_markup=finish_keyboard)
 
+
 @dp.message(lambda message: message.text == "✅ Перейти на PREMIUM")
 async def transition_to_premium(message: types.Message):
     await message.answer("Вы перешли на подписку PREMIUM! Выберите свой тарифный план", reply_markup=premium_keyboard)
+
 
 @dp.message(UserStates.waiting_for_city_or_region)
 async def city_input(message: types.Message, state: FSMContext):
@@ -121,20 +133,48 @@ async def city_input(message: types.Message, state: FSMContext):
     await message.answer("Укажите диапазон цен (например, 1000-5000):")
     await state.set_state(UserStates.waiting_for_price)
 
+
+
+@dp.message(F.text == "🔄 Ввести другой город")
+async def restart_city_input(message: types.Message, state: FSMContext):
+    # Запрос нового города
+    await message.answer("Введите новый город или регион для поиска:")
+    # Устанавливаем состояние ожидания ввода города
+    await state.set_state(UserStates.waiting_for_city_or_region)
+
+@dp.message(UserStates.waiting_for_city_or_region)
+async def city_input(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    city_or_region = message.text
+
+    # Обновление города в базе данных
+    update_user_city(user_id, city_or_region)
+
+    # Запрос диапазона цен
+    await message.answer("Укажите диапазон цен (например, 1000-5000):")
+    # Устанавливаем состояние ожидания ввода цен
+    await state.set_state(UserStates.waiting_for_price)
+
 @dp.message(UserStates.waiting_for_price)
 async def price_input(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     try:
+        # Разделение диапазона цен
         min_price, max_price = map(int, message.text.split('-'))
+
+        # Получение данных города или региона пользователя
         city = get_user_city(user_id)
         region = get_user_region(user_id)
 
+        # Проверка наличия города или региона
         if not city and not region:
             await message.answer("Сначала укажите город или регион.")
             return
 
+        # Поиск по заданным параметрам
         listings = get_listings_by_city_or_region_and_price(city, region, min_price, max_price)
 
+        # Ответ пользователю с результатами
         if listings:
             await message.answer(f"Варианты по цене от {min_price} до {max_price} руб.")
             for description, price, contact, photo in listings:
@@ -145,8 +185,15 @@ async def price_input(message: types.Message, state: FSMContext):
                 )
         else:
             await message.answer(f"Нет вариантов по указанному диапазону цен в {city if city else region}.")
+    except ValueError:
+        # Обработка некорректного ввода цен
+        await message.answer("Некорректный формат. Введите диапазон цен в формате '1000-5000'.")
     finally:
+        # После обработки возвращаем клавиатуру выбора города
+        await message.answer("Хотите сменить город?", reply_markup=restart_keyboard)
         await state.clear()
+
+
 
 @dp.message(F.text == "Тарифы!")
 async def tariffs_command(message: types.Message):
@@ -160,11 +207,13 @@ async def tariffs_command(message: types.Message):
         "✅ 1 год - 2200р"
     )
 
+
 async def main():
     create_table()
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info("Бот запущен!")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

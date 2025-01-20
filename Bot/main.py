@@ -134,7 +134,7 @@ if __name__ == "__main__":
         description="Просторная квартира с видом на Неву",
         price=60000,
         contact="+7 911 123-45-67",
-        photo=r"C:\Users\Darkghost\Desktop\BD\photo1.jpg"
+        photo="C:\\Users\\Darkghost\\Desktop\\BD\\Photo2.jpg"
     )
 
     add_listing_to_database(
@@ -143,7 +143,7 @@ if __name__ == "__main__":
         description="Однокомнатная квартира в спальном районе",
         price=40000,
         contact="+7 901 765-43-21",
-        photo=rb"C:\Users\Darkghost\Desktop\BD\photo2.jpg"
+        photo="C:\\Users\\Darkghost\\Desktop\\BD\\Photo2.jpg"
     )
 
     add_listing_to_database(
@@ -152,7 +152,7 @@ if __name__ == "__main__":
         description="Уютная квартира",
         price=4000,
         contact="+7 901 765-43-21",
-        photo=rb"C:\Users\Darkghost\Desktop\BD\photo2.jpg"
+        photo="C:\\Users\\Darkghost\\Desktop\\BD\\Photo2.jpg"
     )
 
     # Добавление пользователя
