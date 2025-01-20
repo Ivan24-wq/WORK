@@ -46,8 +46,6 @@ def add_user_if_not_exists(telegram_id):
     connection.close()
 
 
-
-
 def update_user_subscription(user_id, subscription_type, duration_in_days):
     """Обновляет подписку пользователя."""
     try:
@@ -59,8 +57,8 @@ def update_user_subscription(user_id, subscription_type, duration_in_days):
 
         # Обновляем подписку
         cursor.execute("""
-            UPDATE user
-            SET current_subscription = ?, subscription_end_date = ?
+            UPDATE users
+            SET subscription = ?, subscription_expiry = ?
             WHERE telegram_id = ?
         """, (subscription_type, end_date, user_id))
         connection.commit()
@@ -69,24 +67,6 @@ def update_user_subscription(user_id, subscription_type, duration_in_days):
     finally:
         connection.close()
 
-def get_user_subscription_info(user_id):
-    """Получает информацию о подписке пользователя."""
-    try:
-        connection = sqlite3.connect("database.db")
-        cursor = connection.cursor()
-
-        cursor.execute("""
-            SELECT current_subscription, subscription_end_date
-            FROM user
-            WHERE telegram_id = ?
-        """, (user_id,))
-        result = cursor.fetchone()
-        return result if result else (None, None)
-    except sqlite3.Error as e:
-        print(f"Ошибка получения подписки: {e}")
-        return None, None
-    finally:
-        connection.close()
 
 
 
@@ -248,6 +228,8 @@ def get_user_region(telegram_id):
         connection.close()
 
 
+from datetime import datetime
+
 def get_user_subscription_info(user_id):
     """Получает информацию о подписке пользователя."""
     try:
@@ -260,13 +242,20 @@ def get_user_subscription_info(user_id):
             WHERE telegram_id = ?
         """, (user_id,))
         result = cursor.fetchone()
-        
+
         if result:
-            return result
-        else:
-            return "Нет подписки", "Не указана дата окончания"  # Возвращаем дефолтные значения, если нет подписки.
+            subscription = result[0]
+            expiry_date = result[1]
+            
+            # Преобразуем строку в объект datetime
+            if expiry_date:
+                expiry_date = datetime.strptime(expiry_date, "%Y-%m-%d")
+            
+            return subscription, expiry_date
+
+        return "Нет подписки", None
     except sqlite3.Error as e:
         print(f"Ошибка получения подписки: {e}")
-        return "Ошибка", "Ошибка"
+        return "Ошибка", None
     finally:
         connection.close()

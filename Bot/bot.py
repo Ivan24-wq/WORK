@@ -19,6 +19,7 @@ from database import (
     get_user_region,
     update_user_region
 )
+from datetime import datetime
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -65,53 +66,52 @@ async def subscription_choice(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     selected_subscription = "Standart" if message.text == "Standart" else "Premium"
     
-    # Обновление подписки для тарифов
     if selected_subscription == "Standart":
         update_user_subscription(user_id, selected_subscription, 0)  # Standart подписка не имеет срока
-        await message.answer("Вы выбрали подписку Standart. Укажите ваш регион.", reply_markup=types.ReplyKeyboardRemove())
+        await message.answer("Вы выбрали подписку Standart. Укажите ваш регион.", reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="✅ Перейти на PREMIUM")]],
+            resize_keyboard=True
+        ))
         await state.set_state(UserStates.waiting_for_city_or_region)
-    else:  # PREMIUM
+    else:
         await message.answer("Вы выбрали подписку Premium. Выберите тариф:", reply_markup=premium_keyboard)
 
 @dp.callback_query(lambda call: call.data.startswith("premium"))
 async def handle_premium_tariff(call: types.CallbackQuery, state: FSMContext):
     tariffs = {
-        "premium_1_month": (200, 30),  # (цена, дни)
+        "premium_1_month": (200, 30),
         "premium_3_months": (499, 90),
         "premium_1_year": (2200, 365),
     }
 
-    tariff = call.data  # Получаем идентификатор тарифа из callback_data
-    selected_tariff = tariffs.get(tariff)  # Получаем данные о тарифе
-
+    selected_tariff = tariffs.get(call.data)
     if selected_tariff:
         price, duration = selected_tariff
-        update_user_subscription(call.from_user.id, "PREMIUM", duration)  # Обновляем подписку в БД
+        update_user_subscription(call.from_user.id, "PREMIUM", duration)
 
-        # Рассчитываем дату окончания подписки
         subscription_type, end_date = get_user_subscription_info(call.from_user.id)
+        if end_date and isinstance(end_date, str):
+            end_date = datetime.strptime(end_date, "%Y-%m-%d")
+        end_date_formatted = end_date.strftime("%d.%m.%Y") if end_date else "Дата окончания неизвестна"
 
-        # Проверяем, если end_date == "Не указана дата окончания" или другое значение ошибки
-        if end_date == "Не указана дата окончания":
-            end_date = "Не установлена"  # Выводим сообщение о том, что дата не установлена
-
-        # Выводим сообщение о подписке
         await call.message.answer(
-            f"Вы выбрали тариф 'PREMIUM'.\n"
-            f"Подписка активна до: {end_date}.\n"
+            f"Тип подписки: {subscription_type}\n"
+            f"Дата окончания: {end_date_formatted}\n"
             f"Стоимость: {price} руб.\n"
             f"Спасибо за выбор!"
-            
         )
-        await call.message.answer(f"Укажите город поиска: ")
+        await call.message.answer("Укажите город поиска:")
         await state.set_state(UserStates.waiting_for_city_or_region)
     else:
         await call.message.answer("Неизвестный тариф. Пожалуйста, выберите тариф заново.")
 
-
 @dp.message(lambda message: message.text == "Выберите подписку!")
 async def choose_subscription_command(message: types.Message):
     await message.answer("Выберите подписку:", reply_markup=finish_keyboard)
+
+@dp.message(lambda message: message.text == "✅ Перейти на PREMIUM")
+async def transition_to_premium(message: types.Message):
+    await message.answer("Вы перешли на подписку PREMIUM! Выберите свой тарифный план", reply_markup=premium_keyboard)
 
 @dp.message(UserStates.waiting_for_city_or_region)
 async def city_input(message: types.Message, state: FSMContext):
@@ -125,22 +125,19 @@ async def city_input(message: types.Message, state: FSMContext):
 async def price_input(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     try:
-        # Разделяем диапазон цен
         min_price, max_price = map(int, message.text.split('-'))
-        city = get_user_city(user_id)  # Получаем город из БД
-        region = get_user_region(user_id)  # Получаем регион из БД
+        city = get_user_city(user_id)
+        region = get_user_region(user_id)
 
         if not city and not region:
             await message.answer("Сначала укажите город или регион.")
             return
 
-        # Ищем объявления по городу или региону
         listings = get_listings_by_city_or_region_and_price(city, region, min_price, max_price)
 
         if listings:
             await message.answer(f"Варианты по цене от {min_price} до {max_price} руб.")
             for description, price, contact, photo in listings:
-                # Выводим только текстовую информацию
                 await message.answer(
                     f"📋 Описание: {description}\n"
                     f"💵 Цена: {price} руб.\n"
