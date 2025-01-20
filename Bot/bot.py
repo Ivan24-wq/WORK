@@ -52,7 +52,7 @@ premium_keyboard = InlineKeyboardMarkup(
 
 # Ввод нового города
 restart_keyboard = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="🔄 Ввести другой город")]],
+    keyboard=[[KeyboardButton(text="🔄 Ввести другой город")], [KeyboardButton(text="🔄 Ввести другой регион")]],
     resize_keyboard=True
 )
 
@@ -142,6 +142,13 @@ async def restart_city_input(message: types.Message, state: FSMContext):
     # Устанавливаем состояние ожидания ввода города
     await state.set_state(UserStates.waiting_for_city_or_region)
 
+@dp.message(F.text == "🔄 Ввести другой регион")
+async def restart_city_input(message: types.Message, state: FSMContext):
+    # Запрос нового города
+    await message.answer("Введите новый регион для поиска:")
+    # Устанавливаем состояние ожидания ввода города
+    await state.set_state(UserStates.waiting_for_city_or_region)
+
 @dp.message(UserStates.waiting_for_city_or_region)
 async def city_input(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
@@ -166,13 +173,12 @@ async def price_input(message: types.Message, state: FSMContext):
         city = get_user_city(user_id)
         region = get_user_region(user_id)
 
-        # Проверка наличия города или региона
-        if not city and not region:
-            await message.answer("Сначала укажите город или регион.")
-            return
+        print(f"Поиск объявлений: город={city}, регион={region}, цены от {min_price} до {max_price}")
 
         # Поиск по заданным параметрам
         listings = get_listings_by_city_or_region_and_price(city, region, min_price, max_price)
+
+        print(f"Найдено {len(listings)} объявлений.")  # Отладочный вывод
 
         # Ответ пользователю с результатами
         if listings:
@@ -192,7 +198,6 @@ async def price_input(message: types.Message, state: FSMContext):
         # После обработки возвращаем клавиатуру выбора города
         await message.answer("Хотите сменить город?", reply_markup=restart_keyboard)
         await state.clear()
-
 
 
 @dp.message(F.text == "Тарифы!")

@@ -66,13 +66,20 @@ def add_listing_to_database(city, region, description, price, contact, photo):
         connection.close()
 
 # Получение всех объявлений из таблицы listings
-def fetch_listings():
-    """Выводит все записи из таблицы listings."""
+def fetch_listings(region=None):
+    """
+    Выводит все записи из таблицы listings.
+    Если указан регион, фильтрует записи по региону.
+    """
     try:
         connection = sqlite3.connect("database.db")
         cursor = connection.cursor()
 
-        cursor.execute("SELECT * FROM listings")
+        if region:
+            cursor.execute("SELECT * FROM listings WHERE region = ?", (region,))
+        else:
+            cursor.execute("SELECT * FROM listings")
+
         rows = cursor.fetchall()
 
         for row in rows:
@@ -130,11 +137,11 @@ if __name__ == "__main__":
     # Добавление объявлений
     add_listing_to_database(
         city="Санкт-Петербург",
-        region="Лененградская область",
+        region="Ленинградская область",
         description="Просторная квартира с видом на Неву",
         price=60000,
         contact="+7 911 123-45-67",
-        photo="C:\\Users\\Darkghost\\Desktop\\BD\\Photo2.jpg"
+        photo="Photo1.jpg"
     )
 
     add_listing_to_database(
@@ -143,25 +150,37 @@ if __name__ == "__main__":
         description="Однокомнатная квартира в спальном районе",
         price=40000,
         contact="+7 901 765-43-21",
-        photo="C:\\Users\\Darkghost\\Desktop\\BD\\Photo2.jpg"
+        photo="Photo2.jpg"
+    )
+    add_listing_to_database(
+        city="Севастополь",
+        region="Севастополь",
+        description="Сдаётся квартира для 3 человек",
+        price=15000,
+        contact="+7 978 52 10 963",
+        photo="Photo2.jpg"
+    )
+    add_listing_to_database(
+        city="Луга",
+        region="Ленинградская",
+        description="Сдаётся квартира для 3 человек",
+        price=15000,
+        contact="+7 978 52 10 963",
+        photo="Photo2.jpg"
     )
 
-    add_listing_to_database(
-        city="Армянск",
-        region="Республика Крым",
-        description="Уютная квартира",
-        price=4000,
-        contact="+7 901 765-43-21",
-        photo="C:\\Users\\Darkghost\\Desktop\\BD\\Photo2.jpg"
-    )
 
     # Добавление пользователя
-    add_user_to_database(telegram_id=7975249145, region="Республика Крым")
+    add_user_to_database(telegram_id=123456789, region="Республика Крым")
 
     # Получение региона пользователя
-    region = get_user_region(telegram_id=7975249145)
-    print(f"Регион пользователя: {region}")
+    user_region = get_user_region(telegram_id=123456789)
+    print(f"Регион пользователя: {user_region}")
+
+    # Вывод объявлений для региона пользователя
+    print("\nСписок объявлений для региона пользователя:")
+    fetch_listings(region=user_region)
 
     # Вывод всех объявлений
-    print("\nСписок объявлений:")
+    print("\nСписок всех объявлений:")
     fetch_listings()

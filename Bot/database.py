@@ -115,32 +115,42 @@ def get_user_city_and_region(telegram_id):
     connection.close()
     return result if result else (None, None)
 
+import sqlite3
+
 def get_listings_by_city_or_region_and_price(city, region, min_price, max_price):
-    """Возвращает объявления по городу или региону и диапазону цен."""
+    """
+    Возвращает список объявлений, соответствующих указанным параметрам (город/регион, диапазон цен).
+    """
     try:
         connection = sqlite3.connect("database.db")
         cursor = connection.cursor()
 
-        query = "SELECT description, price, contact, photo FROM listings WHERE price BETWEEN ? AND ?"
-        params = [min_price, max_price]
+        # SQL-запрос для фильтрации объявлений
+        if city:
+            query = """
+                SELECT description, price, contact, photo
+                FROM listings
+                WHERE city = ? AND price BETWEEN ? AND ?
+            """
+            cursor.execute(query, (city, min_price, max_price))
+        elif region:
+            query = """
+                SELECT description, price, contact, photo
+                FROM listings
+                WHERE region = ? AND price BETWEEN ? AND ?
+            """
+            cursor.execute(query, (region, min_price, max_price))
+        else:
+            return []
 
-        if city:  # Если указан город, ищем по городу
-            query += " AND city = ?"
-            params.append(city)
-        elif region:  # Если указан регион, ищем по региону
-            query += " AND region = ?"
-            params.append(region)
-
-        cursor.execute(query, tuple(params))
         listings = cursor.fetchall()
-
         return listings
-
     except sqlite3.Error as e:
-        print(f"Ошибка при получении данных: {e}")
+        print(f"Ошибка при получении данных из базы: {e}")
         return []
     finally:
         connection.close()
+
 
 
 def get_listings_by_city_and_price(city, min_price, max_price):
@@ -257,5 +267,32 @@ def get_user_subscription_info(user_id):
     except sqlite3.Error as e:
         print(f"Ошибка получения подписки: {e}")
         return "Ошибка", None
+    finally:
+        connection.close()
+
+# Функция для поиска объявлений по региону и диапазону цен
+def fetch_listings_by_region_and_price(region, min_price, max_price):
+    """
+    Выводит объявления, соответствующие региону и диапазону цен.
+    """
+    try:
+        connection = sqlite3.connect("database.db")
+        cursor = connection.cursor()
+
+        # SQL-запрос с фильтрацией по региону и диапазону цен
+        cursor.execute("""
+            SELECT * FROM listings
+            WHERE region = ? AND price BETWEEN ? AND ?
+        """, (region, min_price, max_price))
+        
+        rows = cursor.fetchall()
+
+        if rows:
+            for row in rows:
+                print(f"ID: {row[0]}, Город: {row[1]}, Регион: {row[2]}, Описание: {row[3]}, Цена: {row[4]} руб., Контакт: {row[5]}, Фото: {row[6]}")
+        else:
+            print(f"Нет вариантов по указанному диапазону цен в регионе {region}.")
+    except sqlite3.Error as e:
+        print(f"Ошибка при получении данных: {e}")
     finally:
         connection.close()
